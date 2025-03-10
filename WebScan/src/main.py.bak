@@ -1,0 +1,643 @@
+﻿#!/usr/bin/env python3
+"""
+Web Vulnerability Scanner
+
+This tool scans web applications for common security vulnerabilities
+such as SQL Injection, Cross-Site Scripting (XSS), and more.
+"""
+
+import argparse
+import sys
+import requests
+import re
+import random
+import time
+import urllib.parse
+from bs4 import BeautifulSoup
+from colorama import Fore, Style, init
+from urllib.parse import urljoin
+
+# Initialize colorama for colored terminal output
+init(autoreset=True)
+
+class Scanner:
+    def __init__(self, url, verbose=False):
+        self.url = url
+        self.verbose = verbose
+        self.session = requests.Session()
+        self.session.headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        self.vulnerabilities = []
+
+            def scan(self):
+                """Main scanning method that coordinates all vulnerability checks"""
+                print(f"{Fore.BLUE}[*] Starting scan on {self.url}{Style.RESET_ALL}")
+                
+                try:
+                    # Test connection to target
+                    response = self.session.get(self.url)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    print(f"{Fore.RED}[!] Error connecting to target: {e}{Style.RESET_ALL}")
+                    return False
+                
+                # Get all pages to scan from the initial URL
+                pages = self.crawl()
+                
+                # Run vulnerability scanners on all discovered pages
+                for page in pages:
+                    print(f"{Fore.BLUE}[*] Scanning page: {page}{Style.RESET_ALL}")
+                    
+                    # Run SQL Injection tests
+                    sql_scanner = SQLInjectionScanner(self.session, page, self.verbose)
+                    sql_vulns = sql_scanner.scan()
+                    self.vulnerabilities.extend(sql_vulns)
+                    
+                    # Run XSS tests
+                    xss_scanner = XSSScanner(self.session, page, self.verbose)
+                    xss_vulns = xss_scanner.scan()
+                    self.vulnerabilities.extend(xss_vulns)
+                    
+                return True
+                
+            def run_sqli_scan(self):
+                """Run SQL Injection scan on the target URL"""
+                print(f"{Fore.BLUE}[*] Starting SQL Injection scan on {self.url}{Style.RESET_ALL}")
+                vulnerabilities = []
+                
+                try:
+                    # Test connection to target
+                    response = self.session.get(self.url)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    print(f"{Fore.RED}[!] Error connecting to target: {e}{Style.RESET_ALL}")
+                    return vulnerabilities
+                
+                # Get all pages to scan
+                pages = self.crawl()
+                
+                # Run SQL Injection tests on all discovered pages
+                for page in pages:
+                    if self.verbose:
+                        print(f"{Fore.BLUE}[*] Scanning page for SQL Injection: {page}{Style.RESET_ALL}")
+                    
+                    sql_scanner = SQLInjectionScanner(self.session, page, self.verbose)
+                    sql_vulns = sql_scanner.scan()
+                    vulnerabilities.extend(sql_vulns)
+                    
+                # Add these to the main vulnerabilities list as well
+                self.vulnerabilities.extend(vulnerabilities)
+                return vulnerabilities
+                
+            def run_xss_scan(self):
+                """Run XSS scan on the target URL"""
+                print(f"{Fore.BLUE}[*] Starting XSS scan on {self.url}{Style.RESET_ALL}")
+                vulnerabilities = []
+                
+                try:
+                    # Test connection to target
+                    response = self.session.get(self.url)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    print(f"{Fore.RED}[!] Error connecting to target: {e}{Style.RESET_ALL}")
+                    return vulnerabilities
+                
+                # Get all pages to scan
+                pages = self.crawl()
+                
+                # Run XSS tests on all discovered pages
+                for page in pages:
+                    if self.verbose:
+                        print(f"{Fore.BLUE}[*] Scanning page for XSS: {page}{Style.RESET_ALL}")
+                    
+                    xss_scanner = XSSScanner(self.session, page, self.verbose)
+                    xss_vulns = xss_scanner.scan()
+                    vulnerabilities.extend(xss_vulns)
+                    
+                # Add these to the main vulnerabilities list as well
+                self.vulnerabilities.extend(vulnerabilities)
+                return vulnerabilities
+                
+            def check_security_headers(self):
+                """Check security headers on the target URL"""
+                print(f"{Fore.BLUE}[*] Checking security headers on {self.url}{Style.RESET_ALL}")
+                
+                try:
+                    # Test connection to target
+                    response = self.session.get(self.url)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    print(f"{Fore.RED}[!] Error connecting to target: {e}{Style.RESET_ALL}")
+                    return {}
+                
+                # Run header scanner
+                header_scanner = HeaderScanner(self.session, self.url, self.verbose)
+                return header_scanner.scan()
+        
+    def crawl(self):
+        """Basic crawler to find pages on the target site"""
+        discovered_urls = set([self.url])
+        urls_to_visit = [self.url]
+        
+        try:
+            while urls_to_visit and len(discovered_urls) < 10:  # Limit crawling to 10 pages
+                current_url = urls_to_visit.pop(0)
+                
+                if self.verbose:
+                    print(f"{Fore.CYAN}[+] Crawling: {current_url}{Style.RESET_ALL}")
+                
+                try:
+                    response = self.session.get(current_url, timeout=10)
+                    if response.status_code != 200:
+                        continue
+                    
+                    # Parse the page content
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Find all links
+                    for a_tag in soup.find_all('a', href=True):
+                        href = a_tag['href']
+                        
+                        # Skip external links, anchors, and javascript
+                        if href.startswith('#') or href.startswith('javascript:') or href.startswith('mailto:'):
+                            continue
+                            
+                        # Convert relative URL to absolute
+                        absolute_url = urljoin(current_url, href)
+                        
+                        # Only include URLs from the same domain
+                        if urllib.parse.urlparse(self.url).netloc == urllib.parse.urlparse(absolute_url).netloc:
+                            if absolute_url not in discovered_urls:
+                                discovered_urls.add(absolute_url)
+                                urls_to_visit.append(absolute_url)
+                
+                except requests.exceptions.RequestException:
+                    # Skip URLs that cause errors
+                    continue
+        
+        except Exception as e:
+            print(f"{Fore.RED}[!] Error during crawling: {e}{Style.RESET_ALL}")
+        
+        return list(discovered_urls)
+        
+    def generate_report(self):
+        """Generate a report of found vulnerabilities"""
+        if not self.vulnerabilities:
+            print(f"{Fore.GREEN}[+] No vulnerabilities found.{Style.RESET_ALL}")
+            return
+        
+        print(f"\n{Fore.YELLOW}{'=' * 50}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}VULNERABILITY SCAN REPORT{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}{'=' * 50}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Target: {self.url}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Total vulnerabilities found: {len(self.vulnerabilities)}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}{'=' * 50}{Style.RESET_ALL}\n")
+        
+        for i, vuln in enumerate(self.vulnerabilities, 1):
+            print(f"{Fore.RED}[VULNERABILITY {i}]{Style.RESET_ALL}")
+            print(f"Type: {vuln['type']}")
+            print(f"URL: {vuln['url']}")
+            print(f"Description: {vuln['description']}")
+            if 'payload' in vuln:
+                print(f"Payload: {vuln['payload']}")
+            print(f"Severity: {vuln['severity']}")
+            print(f"Recommendation: {vuln['recommendation']}")
+            print(f"{Fore.YELLOW}{'-' * 50}{Style.RESET_ALL}\n")
+
+
+class SQLInjectionScanner:
+    def __init__(self, session, url, verbose=False):
+        self.session = session
+        self.url = url
+        self.verbose = verbose
+        self.payloads = [
+            "' OR '1'='1", 
+            "' OR 1=1 --", 
+            "\" OR 1=1 --",
+            "' UNION SELECT 1,2,3 --",
+            "admin' --",
+            "1' OR '1' = '1"
+        ]
+        self.indicators = [
+            "SQL syntax",
+            "mysql_fetch_array",
+            "You have an error in your SQL syntax",
+            "ORA-",
+            "MySQL server version",
+            "Unclosed quotation mark",
+            "ODBC Driver"
+        ]
+        
+    def scan(self):
+        """Scan for SQL Injection vulnerabilities"""
+        vulnerabilities = []
+        
+        # Get forms from the page
+        forms = self._get_forms()
+        
+        if self.verbose:
+            print(f"{Fore.CYAN}[+] Found {len(forms)} forms on {self.url}{Style.RESET_ALL}")
+        
+        # Check URL parameters for SQLi
+        parsed_url = urllib.parse.urlparse(self.url)
+        if parsed_url.query:
+            params = urllib.parse.parse_qs(parsed_url.query)
+            for param_name, param_value in params.items():
+                for payload in self.payloads:
+                    test_url = self._inject_payload_in_url(self.url, param_name, payload)
+                    vuln = self._test_url(test_url)
+                    if vuln:
+                        vuln['url'] = test_url
+                        vuln['parameter'] = param_name
+                        vuln['payload'] = payload
+                        vulnerabilities.append(vuln)
+        
+        # Check forms for SQLi
+        for form in forms:
+            form_details = self._get_form_details(form)
+            for payload in self.payloads:
+                if self.verbose:
+                    print(f"{Fore.CYAN}[+] Testing form with payload: {payload}{Style.RESET_ALL}")
+                
+                data = {}
+                for input_tag in form_details["inputs"]:
+                    name = input_tag.get("name")
+                    input_type = input_tag.get("type", "text")
+                    
+                    if name and input_type != "submit" and input_type != "hidden":
+                        data[name] = payload
+                    elif name and input_type == "hidden":
+                        # Use the default value for hidden fields
+                        data[name] = input_tag.get("value", "")
+                
+                if form_details["method"] == "post":
+                    response = self.session.post(form_details["action"], data=data)
+                else:
+                    response = self.session.get(form_details["action"], params=data)
+                
+                # Check for SQL injection indicators in the response
+                for indicator in self.indicators:
+                    if indicator.lower() in response.text.lower():
+                        vulnerabilities.append({
+                            'type': 'SQL Injection',
+                            'url': self.url,
+                            'form_action': form_details["action"],
+                            'payload': payload,
+                            'description': f"SQL Injection vulnerability found in form. Error message contains: {indicator}",
+                            'severity': 'High',
+                            'recommendation': 'Use prepared statements and parameterized queries. Implement proper input validation and sanitization.'
+                        })
+                        break
+        
+        return vulnerabilities
+            
+    def _get_forms(self):
+        """Extract all forms from the page"""
+        try:
+            response = self.session.get(self.url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            return soup.find_all('form')
+        except Exception as e:
+            if self.verbose:
+                print(f"{Fore.RED}[!] Error getting forms: {e}{Style.RESET_ALL}")
+            return []
+            
+    def _get_form_details(self, form):
+        """Extract details from an HTML form"""
+        details = {}
+        
+        # Get the form action
+        action = form.attrs.get("action", "").lower()
+        
+        # If the action is empty or just "#", use the current URL
+        if not action or action == "#":
+            action = self.url
+        else:
+            # If it's a relative URL, make it absolute
+            action = urljoin(self.url, action)
+        
+        # Get the form method
+        method = form.attrs.get("method", "get").lower()
+        
+        # Get all form inputs
+        inputs = []
+        for input_tag in form.find_all("input"):
+            input_type = input_tag.attrs.get("type", "text")
+            input_name = input_tag.attrs.get("name")
+            input_value = input_tag.attrs.get("value", "")
+            
+            inputs.append({
+                "type": input_type,
+                "name": input_name,
+                "value": input_value
+            })
+            
+        # Include other input-like elements such as textareas and selects
+        for textarea in form.find_all("textarea"):
+            inputs.append({
+                "type": "textarea",
+                "name": textarea.attrs.get("name"),
+                "value": textarea.text
+            })
+            
+        for select in form.find_all("select"):
+            select_name = select.attrs.get("name")
+            options = []
+            selected_value = ""
+            
+            for option in select.find_all("option"):
+                option_value = option.attrs.get("value", option.text.strip())
+                options.append(option_value)
+                if option.attrs.get("selected"):
+                    selected_value = option_value
+                    
+            if not selected_value and options:
+                selected_value = options[0]
+                
+            inputs.append({
+                "type": "select",
+                "name": select_name,
+                "value": selected_value,
+                "options": options
+            })
+            
+        details["action"] = action
+        details["method"] = method
+        details["inputs"] = inputs
+        return details
+        
+    def _inject_payload_in_url(self, url, param_name, payload):
+        """Inject a payload into a URL parameter"""
+        parsed = urllib.parse.urlparse(url)
+        query_dict = urllib.parse.parse_qs(parsed.query)
+        
+        # Replace the parameter value with the payload
+        if param_name in query_dict:
+            query_dict[param_name] = [payload]
+            
+        # Reconstruct the URL
+        new_query = urllib.parse.urlencode(query_dict, doseq=True)
+        parsed = parsed._replace(query=new_query)
+        return urllib.parse.urlunparse(parsed)
+        
+    def _test_url(self, url):
+        """Test a URL for SQL injection"""
+        try:
+            response = self.session.get(url)
+            for indicator in self.indicators:
+                if indicator.lower() in response.text.lower():
+                    return {
+                        'type': 'SQL Injection',
+                        'description': f"SQL Injection vulnerability found in URL parameter. Error message contains: {indicator}",
+                        'severity': 'High',
+                        'recommendation': 'Use prepared statements and parameterized queries. Implement proper input validation and sanitization.'
+                    }
+        except Exception as e:
+            if self.verbose:
+                print(f"{Fore.RED}[!] Error testing URL: {e}{Style.RESET_ALL}")
+        return None
+
+
+class XSSScanner:
+    def __init__(self, session, url, verbose=False):
+        self.session = session
+        self.url = url
+        self.verbose = verbose
+        self.payloads = [
+            "<script>alert('XSS')</script>",
+            "<img src=x onerror=alert('XSS')>",
+            "<body onload=alert('XSS')>",
+            "<svg onload=alert('XSS')>",
+            "\"><script>alert('XSS')</script>",
+            "javascript:alert('XSS')",
+            "<iframe src=\"javascript:alert('XSS')\"></iframe>"
+        ]
+        
+    def scan(self):
+        """Scan for XSS vulnerabilities"""
+        vulnerabilities = []
+        
+        # Get forms from the page
+        forms = self._get_forms()
+        
+        if self.verbose:
+            print(f"{Fore.CYAN}[+] Testing {len(forms)} forms for XSS on {self.url}{Style.RESET_ALL}")
+        
+        # Check URL parameters for XSS
+        parsed_url = urllib.parse.urlparse(self.url)
+        if parsed_url.query:
+            params = urllib.parse.parse_qs(parsed_url.query)
+            for param_name, param_value in params.items():
+                for payload in self.payloads:
+                    test_url = self._inject_payload_in_url(self.url, param_name, payload)
+                    if self.verbose:
+                        print(f"{Fore.CYAN}[+] Testing URL parameter {param_name} with payload: {payload}{Style.RESET_ALL}")
+                    
+                    vuln = self._test_url(test_url, payload)
+                    if vuln:
+                        vulnerabilities.append(vuln)
+        
+        # Test form inputs for XSS
+        for form in forms:
+            form_details = self._get_form_details(form)
+            for payload in self.payloads:
+                if self.verbose:
+                    print(f"{Fore.CYAN}[+] Testing form with XSS payload: {payload}{Style.RESET_ALL}")
+                
+                data = {}
+                for input_tag in form_details["inputs"]:
+                    name = input_tag.get("name")
+                    input_type = input_tag.get("type", "text")
+                    
+                    if name and input_type != "submit" and input_type != "hidden":
+                        data[name] = payload
+                    elif name and input_type == "hidden":
+                        # Use the default value for hidden fields
+                        data[name] = input_tag.get("value", "")
+                
+                if form_details["method"] == "post":
+                    response = self.session.post(form_details["action"], data=data)
+                else:
+                    response = self.session.get(form_details["action"], params=data)
+                
+                # Check if our payload is reflected in the response
+                if payload in response.text:
+                    vulnerabilities.append({
+                        'type': 'Cross-Site Scripting (XSS)',
+                        'url': self.url,
+                        'form_action': form_details["action"],
+                        'payload': payload,
+                        'description': f"XSS vulnerability found in form. Payload was reflected in the response.",
+                        'severity': 'High',
+                        'recommendation': 'Implement proper output encoding and input validation. Consider using a Content Security Policy (CSP).'
+                    })
+                    break
+        
+        return vulnerabilities
+        
+        def _get_forms(self):
+            """Extract all forms from the page"""
+            try:
+                response = self.session.get(self.url)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                return soup.find_all('form')
+            except Exception as e:
+                if self.verbose:
+                    print(f"{Fore.RED}[!] Error getting forms: {e}{Style.RESET_ALL}")
+                return []
+        
+        def _get_form_details(self, form):
+            """Extract details from an HTML form"""
+            details = {}
+            
+            # Get the form action
+            action = form.attrs.get("action", "").lower()
+            
+            # If the action is empty or just "#", use the current URL
+            if not action or action == "#":
+                action = self.url
+            else:
+                # If it's a relative URL, make it absolute
+                action = urljoin(self.url, action)
+            
+            # Get the form method
+            method = form.attrs.get("method", "get").lower()
+            
+            # Get all form inputs
+            inputs = []
+            for input_tag in form.find_all("input"):
+                input_type = input_tag.attrs.get("type", "text")
+                input_name = input_tag.attrs.get("name")
+                input_value = input_tag.attrs.get("value", "")
+                
+                inputs.append({
+                    "type": input_type,
+                    "name": input_name,
+                    "value": input_value
+                })
+            # Include other input-like elements such as textareas and selects
+            for textarea in form.find_all("textarea"):
+                inputs.append({
+                    "type": "textarea",
+                    "name": textarea.attrs.get("name"),
+                    "value": textarea.text
+                })
+                
+            for select in form.find_all("select"):
+                select_name = select.attrs.get("name")
+                options = []
+                selected_value = ""
+                
+                for option in select.find_all("option"):
+                    option_value = option.attrs.get("value", option.text.strip())
+                    options.append(option_value)
+                    if option.attrs.get("selected"):
+                        selected_value = option_value
+                        
+                if not selected_value and options:
+                    selected_value = options[0]
+                    
+                inputs.append({
+                    "type": "select",
+                    "name": select_name,
+                    "value": selected_value,
+                    "options": options
+                })
+                
+            details["action"] = action
+            details["method"] = method
+            details["inputs"] = inputs
+            return details
+    
+    def _inject_payload_in_url(self, url, param_name, payload):
+        """Inject a payload into a URL parameter"""
+        parsed = urllib.parse.urlparse(url)
+        query_dict = urllib.parse.parse_qs(parsed.query)
+        
+        # Replace the parameter value with the payload
+        if param_name in query_dict:
+            query_dict[param_name] = [payload]
+            
+        # Reconstruct the URL
+        new_query = urllib.parse.urlencode(query_dict, doseq=True)
+        parsed = parsed._replace(query=new_query)
+        return urllib.parse.urlunparse(parsed)
+    
+    def _test_url(self, url, payload):
+        """Test a URL for XSS vulnerabilities"""
+        try:
+            response = self.session.get(url)
+            
+            # Check if our payload is reflected in the response
+            if payload in response.text:
+                return {
+                    'type': 'Cross-Site Scripting (XSS)',
+                    'url': url,
+                    'payload': payload,
+                    'description': "XSS vulnerability found in URL parameter. Payload was reflected in the response.",
+                    'severity': 'High',
+                    'recommendation': 'Implement proper output encoding and input validation. Consider using a Content Security Policy (CSP).'
+                }
+        except Exception as e:
+            if self.verbose:
+                print(f"{Fore.RED}[!] Error testing URL: {e}{Style.RESET_ALL}")
+        return None
+
+
+class HeaderScanner:
+    def __init__(self, session, url, verbose=False):
+        self.session = session
+        self.url = url
+        self.verbose = verbose
+        self.security_headers = [
+            "Content-Security-Policy",
+            "X-XSS-Protection",
+            "X-Content-Type-Options",
+            "X-Frame-Options",
+            "Strict-Transport-Security",
+            "Referrer-Policy",
+            "Permissions-Policy"
+        ]
+        
+    def scan(self):
+        """Check for security headers in the response"""
+        try:
+            response = self.session.get(self.url)
+            headers = response.headers
+            results = {}
+            
+            for header in self.security_headers:
+                results[header] = header in headers
+                
+                if self.verbose:
+                    if header in headers:
+                        print(f"{Fore.GREEN}[+] {header} is present: {headers[header]}{Style.RESET_ALL}")
+                    else:
+                        print(f"{Fore.RED}[-] {header} is missing{Style.RESET_ALL}")
+            
+            return results
+        
+        except Exception as e:
+            if self.verbose:
+                print(f"{Fore.RED}[!] Error checking security headers: {e}{Style.RESET_ALL}")
+            return {header: False for header in self.security_headers}
+
+
+def main():
+    """Main entry point for the scanner"""
+    parser = argparse.ArgumentParser(description="Web Vulnerability Scanner")
+    parser.add_argument("--url", "-u", required=True, help="Target URL to scan")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+    
+    print(f"{Fore.GREEN}Web Vulnerability Scanner{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}======================={Style.RESET_ALL}")
+    
+    scanner = Scanner(args.url, args.verbose)
+    success = scanner.scan()
+    
+    if success:
+        scanner.generate_report()
+    
+if __name__ == "__main__":
+    main()
+

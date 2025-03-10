@@ -1,0 +1,21 @@
+﻿# Web Vulnerability Scanner Requirements
+# Core dependencies
+requests>=2.25.0
+beautifulsoup4>=4.9.3
+flask>=2.0.0
+flask-cors>=3.0.10
+
+# Parsing and processing
+lxml>=4.6.0
+html5lib>=1.1
+
+# Progress display (for CLI)
+tqdm>=4.60.0
+
+# Report generation
+jinja2>=3.0.0
+markupsafe>=2.0.0
+
+# Security related
+urllib3>=1.26.0
+cryptography>=3.4.0

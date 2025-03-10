@@ -1,0 +1,71 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Scan Results - Web Vulnerability Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <div class="container results-container">
+        <h1>Scan Results</h1>
+        <div class="scan-info">
+            <p><strong>Target URL:</strong> {{ scan_data.url }}</p>
+            <p><strong>Scan Date:</strong> {{ scan_data.date }}</p>
+            <p><strong>Scan Duration:</strong> {{ scan_data.duration }} seconds</p>
+        </div>
+        
+        <div class="results-summary">
+            <h2>Summary</h2>
+            <div class="summary-stats">
+                <div class="stat-box high">
+                    <span class="count">{{ scan_data.high_count }}</span>
+                    <span class="label">High Risk</span>
+                </div>
+                <div class="stat-box medium">
+                    <span class="count">{{ scan_data.medium_count }}</span>
+                    <span class="label">Medium Risk</span>
+                </div>
+                <div class="stat-box low">
+                    <span class="count">{{ scan_data.low_count }}</span>
+                    <span class="label">Low Risk</span>
+                </div>
+            </div>
+        </div>
+        
+        {% if scan_data.vulnerabilities %}
+            <div class="vulnerabilities-section">
+                <h2>Detected Vulnerabilities</h2>
+                {% for vuln in scan_data.vulnerabilities %}
+                    <div class="vulnerability-card {{ vuln.severity|lower }}">
+                        <div class="vuln-header">
+                            <h3>{{ vuln.name }}</h3>
+                            <span class="severity-badge {{ vuln.severity|lower }}">{{ vuln.severity }}</span>
+                        </div>
+                        <div class="vuln-details">
+                            <p><strong>Location:</strong> {{ vuln.location }}</p>
+                            <p><strong>Description:</strong> {{ vuln.description }}</p>
+                            {% if vuln.payload %}
+                                <p><strong>Payload:</strong> <code>{{ vuln.payload }}</code></p>
+                            {% endif %}
+                            <div class="remediation">
+                                <h4>Recommended Fix:</h4>
+                                <p>{{ vuln.remediation }}</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="no-vulnerabilities">
+                <h2>No Vulnerabilities Detected</h2>
+                <p>Good news! No security vulnerabilities were found during this scan.</p>
+            </div>
+        {% endif %}
+        
+        <div class="action-buttons">
+            <a href="{{ url_for('index') }}" class="btn">New Scan</a>
+            <a href="{{ url_for('download_report', scan_id=scan_data.id) }}" class="btn download-btn">Download Report</a>
+        </div>
+    </div>
+</body>
+</html>
